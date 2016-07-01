@@ -1,10 +1,13 @@
 #! /usr/bin/perl
 
 package Glooo::Lexer;
+use Data::Dumper;
 
 use warnings;
 use strict;
 
+# new(src)
+# Creates a new Lexer object with src as the string to lex.
 sub new {
 	my ($class, $src) = @_;
 	my $self = {};
@@ -15,6 +18,8 @@ sub new {
 	return $self;
 }
 
+# _init(src)
+# A private sub that initialises the lexer with the defaults to lex src.
 sub _init {
 	my ($self, $src) = @_;
 
@@ -24,13 +29,15 @@ sub _init {
 	$self->{last} = length $src;
 }
 
+# _length
+# A private sub that gives us the length of the current chunk we are lexing.
 sub _length {
 	my ($self) = @_;
 	return $self->{start} + $self->{len}, 
 }
 
-# Next()
-# Returns the next char from the Lexer and increments the length.
+# next
+# Returns the next char from the Lexer and increments the len.
 sub next {
 	my ($self) = @_;
 
@@ -38,8 +45,8 @@ sub next {
 	my $c = substr($self->{src}, $self->_length, 1);
 	$self->{len} += 1;
 
-	# If len is bigger than the string just return a NULL character.
-	if ($self->{len} > $self->{last}) {
+	# If len is bigger than the string just return an empty string.
+	if ($self->_length > $self->{last}) {
 		$self->{len} = $self->{last};
 		return "";
 	}
@@ -47,21 +54,28 @@ sub next {
 	return $c;
 }
 
-# Prev()
+# prev
 # Returns the previous char from the Lexer.
 sub prev {
 	my ($self) = @_;
+	# If there are no characters before we return an empty string.
 	return "" if ($self->{len} <= 0);
 	return substr($self->{src}, $self->_length - 1, 1);
 }
 
+# peek
+# Returns the next char from the Lexer, without incrementing the len.
 sub peek {
 	my ($self) = @_;
+	# If we go over the last char return an empty string.
 	return "" if (($self->{last} > 0) && (($self->_length + 1) > $self->{last}));
 	return substr($self->{src}, $self->_length, 1);
 }
 
-sub _accept {
+# _validate(valid)
+# A private sub that takes a string of chars, if any of the chars appear 
+# in the src it returns true. It also increments the lexer.
+sub _validate {
 	my ($self, $valid) = @_;
 	my $c = $self->next;
 	for my $i (split(//, $valid)) {
@@ -70,34 +84,69 @@ sub _accept {
 	return 0;
 }
 
-sub Accept {
-	my ($self, $valid) = @_;
-	while ($self->_accept($valid)) {
+# accept(str)
+# Returns the first char that isn't in str.
+sub accept {
+	my ($self, $str) = @_;
+	while ($self->_validate($str)) {
 		return "" if ($self->peek eq "");
 	}
 	return $self->prev;
 }
 
-sub Deny {
-
+# deny(str)
+# Returns the first char that is in str.
+sub deny {
+	my ($self, $str) = @_;
+	while (!$self->_validate($str)) {
+		return "" if ($self->peek eq "");
+	}
+	return $self->prev;
 }
 
-sub Match {
-
+# match(str)
+# Checks to see if the ensuing pattern in src matches length.
+sub match {
+	my ($self, $str) = @_;
+	my $src = substr($self->{src}, $self->_length, (length $str));
+	return ($str eq $src);
 }
 
-sub Ditch {
+# ditch()
+# Start lexing src from this point.
+sub ditch {
+	my ($self) = @_;
+	$self->{start} += $self->{len};
+	$self->{len} = 0;
+}
 
+# token()
+# Gets the current token from the lexer.
+sub token {
+	my ($self) = @_;
+	return substr($self->{src}, $self->{start}, $self->{len});
+}
+
+sub _status {
+	my ($self) = @_;
+	$self->{_token} = $self->token;
+	$self->{_length} = $self->_length;
+	print STDERR Dumper $self;
 }
 
 package main;
-
 use Data::Dumper;
 
-my $lexer = Glooo::Lexer->new("yum! yum!");
-print Dumper $lexer;
 
-$lexer->Accept("yum");
-print "prev: " . $lexer->prev . "\n";
-print "next: " . $lexer->next . "\n";
-print "peek: " . $lexer->peek . "\n";
+my $lexer = Glooo::Lexer->new("    'hello'world");
+$lexer->_status;
+
+$lexer->deny("'");
+print STDERR "Match\n" if ($lexer->match("hello"));
+$lexer->_status;
+$lexer->ditch;
+$lexer->accept("helo'");
+$lexer->_status;
+print STDERR "prev: " . $lexer->prev . "\n";
+print STDERR "next: " . $lexer->next . "\n";
+print STDERR "peek: " . $lexer->peek . "\n";
